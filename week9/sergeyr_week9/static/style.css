@@ -1,0 +1,50 @@
+h1 {
+    color: #1f8dd6;
+    text-align: center;
+}
+
+h1 a {
+    text-decoration: none;
+    color: #1f8dd6;
+}
+
+.errorline {
+    color: darkred;
+}
+
+.msg-exception {
+    text-align:center;
+    max-width: 50%;
+    margin: 1em auto; /* center */
+    font-size: 150%;
+}
+
+.splash {
+    width: fit-content;
+    block-size: fit-content;
+
+    margin: 100px auto;
+    text-align: center;
+}
+ 
+.splash-frame {
+    font-size: 20px;
+    margin-bottom: 1em;
+    font-weight: bold;
+    color: #1f8dd6;
+    border: 3px solid #1f8dd6;
+    padding: 1em 1.6em;
+    font-weight: 100;
+    border-radius: 5px;
+    line-height: 1em;
+}
+ 
+.splash-form {
+    color: #1f8dd6;
+    letter-spacing: 0.05em;
+    opacity: 0.8;
+    
+}
+.splash-form label{
+    font-weight: bold;
+}

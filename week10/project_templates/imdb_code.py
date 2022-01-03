@@ -2,11 +2,10 @@
 # and put them in `imdb_helper_functions` module.
 # you can import them and use here like that:
 from asyncio.tasks import gather
-import multiprocessing
+import multiprocessing as mp
 import time
 from bs4 import BeautifulSoup
 import urllib
-import collections
 from imdb_helper_functions import get_url
 from functools import lru_cache
 import queue
@@ -17,6 +16,8 @@ import requests
 import lxml
 import cchardet
 import datetime
+import logging
+from asyncio_throttle import Throttler
 
 cache = {}
 
@@ -48,7 +49,7 @@ def get_movies_by_actor_soup(actor_page_soup: BeautifulSoup, num_of_movies_limit
         if len(refs) == 1 and refs[0].parent.next_sibling.text.strip() == '':
             
             movie = refs[0]
-            movies.append((movie.get_text(), movie.attrs['href']))
+            movies.append((movie.get_text(), movie.attrs['href'] + 'fullcredits'))
 
             if len(movies) == num_of_movies_limit:
                 break
@@ -58,7 +59,7 @@ def get_movies_by_actor_soup(actor_page_soup: BeautifulSoup, num_of_movies_limit
 @lru_cache(maxsize=None)
 def get_movies_by_actor_url(url, num_of_movies_limit=None):
     page_text = get_url(url)
-    soup = BeautifulSoup(page_text, features="html.parser")
+    soup = BeautifulSoup(page_text, features="lxml")
     return get_movies_by_actor_soup(soup, num_of_movies_limit)
 
 def get_movies_by_actor_page(page_text, num_of_movies_limit=None):
@@ -68,7 +69,7 @@ def get_movies_by_actor_page(page_text, num_of_movies_limit=None):
 @lru_cache(maxsize=None)
 def get_actors_by_movie_url(url, num_of_actors_limit=None):
     page_text = get_url(url)
-    soup = BeautifulSoup(page_text, features="html.parser")
+    soup = BeautifulSoup(page_text, features="lxml")
     return get_actors_by_movie_soup(soup, num_of_actors_limit)
 
 def get_actors_by_movie_page(page_text, num_of_actors_limit=None):
@@ -121,6 +122,20 @@ def get_movie_distance(actor_start_url, actor_end_url,
                 
                 actors_queue.put(actor_url)
 
+def process_responce(jobs_queue: mp.Queue, actor_movies_queue: mp.Queue, movie_actors_queue: mp.Queue):
+
+    while True:
+        command, url, data = jobs_queue.get()
+
+        if command == 1:
+            actor_movies = get_movies_by_actor_page(data)
+            actor_movies_queue.put((url, actor_movies))
+        elif command == 2:
+            movie_actors = get_actors_by_movie_page(data)
+            movie_actors_queue.put((url, movie_actors))
+        else:
+            return
+
 async def get_movie_distance_async(actor_start_url, actor_end_url,
         num_of_actors_limit=None, num_of_movies_limit=None):
     
@@ -132,67 +147,97 @@ async def get_movie_distance_async(actor_start_url, actor_end_url,
     movies_queue = set()
     actors_queue = set()
     
+    manager = mp.Manager()
+    # jobs_queue = manager.Queue()
+    jobs_queue = mp.Queue()
+    actor_movies_queue = manager.Queue()
+    movie_actors_queue = manager.Queue()
+
     actors_queue.add(start_url)
 
     distance = 0
 
-    workers_count = multiprocessing.cpu_count() - 2
+    # workers_count = mp.cpu_count() - 2
+    workers_count = 3
+
+    workers: list[mp.Process] = []
+    for _ in range(workers_count):
+        worker = mp.Process(target=process_responce, args=(jobs_queue, actor_movies_queue, movie_actors_queue))
+        worker.start()
+        workers.append(worker)
 
     headers = {
         'Accept-Language':'en',
         'X-FORWARDED-FOR':'2.21.184.0'
     }
+    throttler = Throttler(rate_limit=3)
     timeout = aiohttp.ClientTimeout(total=60)
-    connector = aiohttp.TCPConnector(limit=0)
+    connector = aiohttp.TCPConnector(limit=100)
     async with aiohttp.ClientSession(base_url=base_url, headers=headers, connector=connector, timeout=timeout) as session:
-      with Pool(workers_count) as pool:
   
         while len(actors_queue) + len(movies_queue) > 0:
             movies_queue = set()
             actors_queue -= visited_urls
 
-            for actor in actors_queue:
+            for actor in list(actors_queue):
                 data = cache.get(actor, None)
                 if type(data) == list:
                     movies_queue.update(data)
                     actors_queue -= actor
 
-            actors_pages = await asyncio.gather(*[get_url(actor_url, session) for actor_url in actors_queue])
+            await asyncio.gather(*[get_url(actor_url, session, throttler, jobs_queue, 1) for actor_url in actors_queue])
             visited_urls |= actors_queue
 
-            print(f'{datetime.datetime.now().ctime()} srart processing of {len(actors_pages)} actors')
-            data = pool.map(get_movies_by_actor_page, actors_pages)
-            print(f'{datetime.datetime.now().ctime()} finish processing of {len(actors_pages)} actors')
-            cache.update({actor_url:movies for actor_url, movies in zip(actors_queue, data)})
+            # print(f'{datetime.datetime.now().ctime()} srart processing of {len(actors_pages)} actors')
+            # data = pool.map(get_movies_by_actor_page, actors_pages)
+            # print(f'{datetime.datetime.now().ctime()} finish processing of {len(actors_pages)} actors')
+            
+            data = [actor_movies_queue.get() for _ in actors_queue]           
+            cache.update(dict(data))
 
-            movies_queue.update([a[1] for b in data for a in b])
+            # flatten array and update movies queue
+            movies_queue.update([a[1] for b in data for a in b[1]])
 
             distance += 1
 
             actors_queue = set()
             movies_queue -= visited_urls
-            for movie in movies_queue:
+            for movie in list(movies_queue):
                 data = cache.get(movie, None)
                 if type(data) == list:
                     actors_queue.update(data)
                     movies_queue -= movie
 
-
-            movies_pages = await asyncio.gather(*[get_url(movie_url + 'fullcredits', session) for movie_url in movies_queue])
+            await asyncio.gather(*[get_url(movie_url, session, throttler, jobs_queue, 2) for movie_url in movies_queue])
             visited_urls |= movies_queue
 
-            print(f'{datetime.datetime.now().ctime()} srart processing of {len(movies_pages)} movies')
-            data = pool.map(get_actors_by_movie_page, movies_pages)
-            print(f'{datetime.datetime.now().ctime()} finish processing of {len(movies_pages)} movies')
+            # print(f'{datetime.datetime.now().ctime()} srart processing of {len(movies_pages)} movies')
+            # data = pool.map(get_actors_by_movie_page, movies_pages)
+            # print(f'{datetime.datetime.now().ctime()} finish processing of {len(movies_pages)} movies')
+            data = [movie_actors_queue.get() for _ in movies_queue]
+            cache.update(dict(data))
 
-            cache.update({movie_url:movies for movie_url, movies in zip(movies_pages, data)})
+            # flatten array and update actors queue
+            actors_queue.update([a[1] for b in data for a in b[1]])
 
-            actors_queue.update([a[1] for b in data for a in b])
-
+            # stop jobs if result is found and return distance
             if end_url in actors_queue:
+                for worker in workers:
+                    jobs_queue.put((None, None, None))
+
+                for worker in workers:
+                    worker.join()
+                
                 return distance
 
+            # stop jobs if distance > 4 and return 5
             if distance == 4:
+                for worker in workers:
+                    jobs_queue.put((None, None, None))
+
+                for worker in workers:
+                    worker.join()
+
                 return 5
 
             
@@ -345,6 +390,8 @@ def test1():
     print(get_actors_by_movie_soup(soup, 10))
 
 if __name__ == '__main__':
+    # logger = mp.log_to_stderr()
+    # logger.setLevel(mp.SUBDEBUG)
     asyncio.run(main())
     # import cProfile
     # print(cProfile.__file__)

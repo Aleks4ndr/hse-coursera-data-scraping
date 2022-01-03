@@ -1,0 +1,11 @@
+{%- macro formula(vars) -%}
+    {% for var in vars %}
+        {% set pow = vars|length - loop.index %}
+        <i>{{ var }}</i> {{ 'X' if pow else '' }}
+        {% if pow > 1 %}
+        <sup>{{ pow }}</sup> 
+        {% endif %}
+        {{ " + " if not loop.last else "" }}
+    {% endfor %}
+        = 0
+{%- endmacro -%}

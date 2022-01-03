@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>ʕ•́ᴥ•̀ʔっ♡</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='pure-min.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}" />
+</head>
+<body>
+<main>
+    <h1><a href="{{ url_for('main') }}">Equation Solver</a></h1>
+    {% if 'exception' in errorlines %}
+        <p class="errorline msg-exception"> {{errorlines['exception'] }}</p>
+    {% endif %}
+    <div class="splash">
+        {% block body %}
+        {% endblock %}
+    </div>
+</main>
+</body>
+</html>

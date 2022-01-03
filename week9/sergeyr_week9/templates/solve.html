@@ -1,0 +1,19 @@
+{% extends "layout.j2" %}
+{% from "formula.j2" import formula %}
+
+{% block body %}
+<h2> Solution </h2>
+<div class="splash-frame">
+    {{ formula(params.values()) }}
+    <p class="solution">
+        {% if solution is defined %}
+            {% if 'roots' in solution and solution['roots']|length < 1 %} <strong>No roots</strong>
+            {% else %} Roots: X = {<strong>{{ solution['roots']|join('; ')}} </strong>}
+            {% endif %}
+        {% endif %}
+    </p>
+</div>
+<form method="get">
+    <button type="submit" name="action" value="new" class="pure-button pure-button-primary">New</button>
+</form>
+{% endblock %}

@@ -1,0 +1,29 @@
+.header {
+  font-family: cursive;
+  height: 150px;
+  font-size: 250%;
+  position: relative;
+  padding-left: 80px;
+}
+.main {
+  font-size: 150%;
+  text-align: left;
+  padding-left: 80px;
+  padding-right: 80px;
+
+}
+
+.content{
+  font-size: 150%;
+  padding-left: 80px;
+  padding-right: 80px;
+}
+
+.header_picture {
+  padding-left: 80px;
+}
+
+th, td {
+  padding: 15px;
+  text-align: left;
+}

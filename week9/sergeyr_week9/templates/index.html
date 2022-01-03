@@ -1,0 +1,26 @@
+{% extends "layout.j2" %}
+{% from "formula.j2" import formula %}
+
+{% block body %}
+<div class="splash-frame">
+    {{ formula(params.keys()) }}
+</div>
+<p>Enter equation parameters:</p>
+<form class="splash-form pure-form pure-form-aligned" method="get">
+    <fieldset>
+        {% for param, value in params.items() %}
+        <div class="pure-control-group">
+            <label for="param-{{ param }}"><i>{{ param }}:</i></label>
+            <input type="number" name="{{ param }}" step="any" placeholder="number" value="{{value}}">
+            {% if param in errorlines %}
+            <span class="pure-form-message errorline">{{ errorlines[param] }}</span>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <div class="pure-controls">
+            <button type="submit" name="action" value="solve" class="pure-button pure-button-primary">Solve</button>
+            <button type="submit" name="action" value="plot"  class="pure-button pure-button-primary">Plot</button>
+        </div>
+    </fieldset>
+</form>
+{% endblock %}

@@ -1,0 +1,17 @@
+<html>
+    <head>
+        <title>Main page</title>
+        <link href="{{ url_for('static', path='/style.css') }}" rel="stylesheet">
+    </head>
+    <body>
+        <h3 style="color:black">Roots: </h3>
+        <p>
+            {% for root in roots %}
+            x{{loop.index}}={{root}}<br>
+            {%  endfor %}
+        </p>
+
+        <img src="data:image/png;base64, {{picture}}" alt="plot">
+
+    </body>
+</html>
